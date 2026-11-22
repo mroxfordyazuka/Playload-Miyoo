@@ -1,0 +1,8 @@
+build/
+out/
+.DS_Store
+App/Playload/log.txt
+App/Playload/settings.txt
+App/Playload/state.txt
+App/Playload/arcade.json
+App/Playload/favorites.txt

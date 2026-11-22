@@ -1,0 +1,7 @@
+{
+  "label": "Playload",
+  "icon": "icon.png",
+  "iconsel": "",
+  "description": "Tiny games shared as links",
+  "launch": "launch.sh"
+}

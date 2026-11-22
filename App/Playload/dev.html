@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Playload dev panel - Miyoo</title>
+<style>
+  :root { --bg:#16111b; --panel:#221a28; --edge:#55415f; --text:#dcf5ff; --dim:#8a918a; --yellow:#e6c86e; --red:#d77355; --green:#64b964; --blue:#508cd7; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--text); font: 14px/1.45 ui-monospace, Menlo, Consolas, monospace; display: flex; flex-direction: column; }
+  header { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 2px solid var(--edge); flex-wrap: wrap; }
+  h1 { font-size: 15px; margin: 0; letter-spacing: 1px; }
+  h1 b { background: var(--edge); color: var(--yellow); padding: 2px 6px; } h1 i { background: var(--yellow); color: var(--edge); padding: 2px 6px; font-style: normal; font-weight: 700; }
+  .stripe { display: flex; height: 4px; } .stripe span { flex: 1; }
+  button, .btn { font: inherit; border: 2px solid var(--edge); background: var(--panel); color: var(--text); padding: 6px 12px; cursor: pointer; text-decoration: none; }
+  button:hover, .btn:hover { border-color: var(--yellow); }
+  button.go { background: var(--yellow); color: #000; border-color: var(--yellow); font-weight: 700; }
+  .keep { display: inline-flex; } .keep input { width: 200px; font: inherit; background: var(--bg); color: var(--text); border: 2px solid var(--edge); border-right: 0; padding: 6px 8px; }
+  #open svg { vertical-align: -1px; margin-left: 2px; }
+  label { color: var(--dim); display: inline-flex; align-items: center; gap: 6px; }
+  #status { margin-left: auto; padding: 4px 10px; border: 2px solid var(--edge); min-width: 220px; }
+  #status.running { border-color: var(--green); color: var(--green); } #status.error { border-color: var(--red); color: var(--red); } #status.off { color: var(--dim); }
+  main { flex: 1; display: flex; min-height: 0; }
+  #ed { flex: 1; display: flex; min-width: 0; background: var(--panel); }
+  #nums { padding: 12px 8px 12px 12px; color: var(--edge); text-align: right; user-select: none; overflow: hidden; white-space: pre; }
+  textarea { flex: 1; resize: none; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; padding: 12px 12px 12px 4px; white-space: pre; overflow: auto; tab-size: 2; }
+  aside { width: 300px; border-left: 2px solid var(--edge); padding: 12px 14px; overflow: auto; color: var(--dim); }
+  aside h2 { font-size: 13px; color: var(--yellow); margin: 14px 0 6px; } aside h2:first-child { margin-top: 0; }
+  aside code { color: var(--text); } aside p { margin: 4px 0; }
+  .meter { height: 6px; background: var(--panel); border: 1px solid var(--edge); margin: 6px 0; } .meter div { height: 100%; background: var(--green); width: 0; }
+  select { flex: 1; min-width: 0; font: inherit; background: var(--bg); color: var(--text); border: 2px solid var(--edge); padding: 5px 8px; }
+  .row { display: flex; gap: 6px; margin: 6px 0; } .row input { flex: 1; min-width: 0; font: inherit; background: var(--bg); color: var(--text); border: 2px solid var(--edge); padding: 5px 8px; }
+  #err { color: var(--red); white-space: pre-wrap; }
+  @media (max-width: 760px) { aside { display: none; } }
+</style>
+</head>
+<body>
+<div class="stripe"><span style="background:#d77355"></span><span style="background:#e6c86e"></span><span style="background:#64b964"></span><span style="background:#508cd7"></span><span style="background:#55415f"></span><span style="background:#646964"></span><span style="background:#dcf5ff"></span></div>
+<header>
+  <h1><b>PLAY</b><i>LOAD</i> dev panel</h1>
+  <button class="go" id="run" title="Ctrl+Enter or Cmd+Enter">Run on Miyoo</button>
+  <span class="keep"><input id="name" placeholder="Name" maxlength="40" title="The name it gets in My Games"><button id="save" title="Adds it to My Games on the Miyoo as a new game">Save to My Games</button></span>
+  <a class="btn" id="open" target="_blank" rel="noopener" title="Opens this code on kitao.dev in a new tab, with a link you can share">Open on Kitao <svg width="11" height="11" viewBox="0 0 11 11" aria-hidden="true"><path d="M4 1H1v9h9V7M6 1h4v4M10 1L5 6" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></a>
+  <label><input type="checkbox" id="live"> run as I type</label>
+  <button id="lang" title="English / 日本語">日本語</button>
+  <div id="status" class="off">connecting...</div>
+</header>
+<main>
+  <div id="ed"><div id="nums">1</div><textarea id="code" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea></div>
+  <aside>
+    <h2>Size</h2>
+    <p id="size">-</p>
+    <div class="meter"><div id="bar"></div></div>
+    <p>A Playload link holds 3072 packed bytes. Bigger games still run from here, they just can't be shared as a link.</p>
+    <h2>Examples</h2>
+    <div class="row"><select id="examples"><option value="">Kitao's examples...</option></select><button id="new">New game</button></div>
+    <h2>Load a link</h2>
+    <div class="row"><input id="link" placeholder="Paste a Playload link to load it"><button id="load">Load</button></div>
+    <p id="err"></p>
+    <h2>The whole API</h2>
+    <p><code>cls(col)</code> clear the text screen</p>
+    <p><code>put(cx, cy, str, col1, col2)</code> text, 20 x 18 cells</p>
+    <p><code>spr(x, y, chr, col)</code> sprite, this frame only</p>
+    <p><code>btn(i)</code> <code>btnp(i)</code> 0-5: up down left right A B</p>
+    <p><code>play(ch, score)</code> 3 channels, MML-like</p>
+    <p><code>scr[cy][cx]</code> <code>.chr</code> <code>.col</code> the cells</p>
+    <p><code>pcg[chr]</code> <code>.pat</code> <code>.col</code> redefine a character</p>
+    <p><code>function tick() {}</code> runs 60 times a second</p>
+    <p>Colors 0-7: black, purple, gray, red, blue, green, yellow, white.</p>
+    <h2>From a terminal</h2>
+    <p>Use your own editor and push the file:</p>
+    <p><code id="curl"></code></p>
+  </aside>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const code = $('code'), nums = $('nums'), statusBox = $('status');
+
+// ---- English / Japanese. Every text on the page and every message goes through tr().
+const JA = {
+  'dev panel': '開発パネル', 'Run on Miyoo': 'Miyoo で実行', 'Name': '名前', 'The name it gets in My Games': 'マイゲームでの名前',
+  'Adds it to My Games on the Miyoo as a new game': 'Miyoo のマイゲームに新しいゲームとして追加します', 'Save to My Games': 'マイゲームに保存',
+  'Opens this code on kitao.dev in a new tab, with a link you can share': 'このコードを kitao.dev の新しいタブで開きます（共有できるリンク付き）', 'Open on Kitao': 'Playload 公式エディタで開く',
+  'run as I type': '入力しながら実行', 'connecting...': '接続中...', 'Size': 'サイズ',
+  "A Playload link holds 3072 packed bytes. Bigger games still run from here, they just can't be shared as a link.": 'Playload のリンクに入るのは圧縮後 3072 バイトまでです。それより大きいゲームもここからは実行できますが、リンクとして共有はできません。',
+  'Examples': 'サンプル', "Kitao's examples...": 'サンプルを選ぶ...', 'New game': '新しいゲーム', 'Load a link': 'リンクを読み込む', 'Paste a Playload link to load it': 'Playload のリンクを貼り付け', 'Load': '読み込む',
+  'The whole API': 'API 一覧', 'clear the text screen': 'テキスト画面を消去', 'text, 20 x 18 cells': '文字（20 x 18 マス）', 'sprite, this frame only': 'スプライト（このフレームのみ）',
+  '0-5: up down left right A B': '0-5: 上 下 左 右 A B', '3 channels, MML-like': '3 チャンネル、MML 風', 'the cells': '各マス', 'redefine a character': '文字を再定義', 'runs 60 times a second': '毎秒 60 回実行',
+  'Colors 0-7: black, purple, gray, red, blue, green, yellow, white.': '色 0-7: 黒、紫、灰、赤、青、緑、黄、白。', 'From a terminal': 'ターミナルから', 'Use your own editor and push the file:': '好きなエディタで書いて、ファイルを送信:',
+  'Ctrl+Enter or Cmd+Enter': 'Ctrl+Enter または Cmd+Enter',
+  'The Miyoo refused it.': 'Miyoo に拒否されました。', 'sent...': '送信しました...', 'Miyoo not reachable': 'Miyoo に接続できません', 'starting...': '起動中...', 'ready - press Run': '準備完了 - 「Miyoo で実行」を押してください',
+  'Miyoo not reachable (is the Dev panel screen open?)': 'Miyoo に接続できません（開発パネルの画面は開いていますか？）', 'error': 'エラー',
+  'This browser cannot pack the game.': 'このブラウザではゲームを圧縮できません。', 'Saved to My Games.': 'マイゲームに保存しました。', 'The Miyoo did not accept it.': 'Miyoo が受け付けませんでした。', 'Miyoo not reachable.': 'Miyoo に接続できません。',
+  'Put back what was here': '元のコードに戻す', 'A new game.': '新しいゲームです。', 'That is not a Playload link.': 'Playload のリンクではありません。', 'Could not read that link.': 'リンクを読み込めませんでした。',
+  'This is the game you opened on the Miyoo. Save to My Games keeps your version as a new game; the original stays as it is.': 'Miyoo で開いたゲームです。「マイゲームに保存」すると新しいゲームとして保存され、元のゲームはそのまま残ります。',
+  'Open the Dev panel on the Miyoo first.': '先に Miyoo で開発パネルを開いてください。', 'Too large.': '大きすぎます。',
+};
+const JA_FORMS = [
+  [/^running  -  tick ([\d.]+) ms of 16\.7$/, '実行中  -  1 ティック $1 ms / 16.7'], [/^running$/, '実行中'],
+  [/^Too big for a link: (\d+) of 3072 bytes\.$/, 'リンクには大きすぎます: $1 / 3072 バイト'], [/^Saved to My Games as "(.*)"\.$/, 'マイゲームに「$1」として保存しました。'],
+  [/^"(.*)" is in the editor\.$/, '「$1」をエディタに読み込みました。'], [/^(\d+) of 3072 packed bytes$/, '圧縮後 $1 / 3072 バイト'], [/^(\d+) characters$/, '$1 文字'],
+];
+let lang = 'en';
+try { lang = localStorage.getItem('playload-dev-lang') || ((navigator.language || '').startsWith('ja') ? 'ja' : 'en'); } catch { lang = (navigator.language || '').startsWith('ja') ? 'ja' : 'en'; }
+function tr(text) {
+  if (lang !== 'ja' || !text) return text;
+  if (JA[text]) return JA[text];
+  for (const [form, to] of JA_FORMS) if (form.test(text)) return text.replace(form, to);
+  return text;
+}
+const fixed = [];   // [node or element, attribute or null, the English]
+function localize() {
+  if (!fixed.length) {
+    const skip = new Set(['status', 'size', 'err', 'curl', 'nums', 'code', 'lang']);
+    const walk = (el) => {
+      if (skip.has(el.id) || el.tagName === 'SCRIPT' || el.tagName === 'CODE' || el.tagName === 'svg') return;
+      for (const a of ['title', 'placeholder']) if (el.getAttribute && el.getAttribute(a)) fixed.push([el, a, el.getAttribute(a)]);
+      for (const n of el.childNodes) { if (n.nodeType === 3 && n.nodeValue.trim()) fixed.push([n, null, n.nodeValue]); else if (n.nodeType === 1) walk(n); }
+    };
+    walk(document.body);
+  }
+  for (const [n, attr, en] of fixed) { const key = en.trim(), to = en.replace(key, () => tr(key)); if (attr) n.setAttribute(attr, to); else n.nodeValue = to; }
+  document.documentElement.lang = lang;
+  $('lang').textContent = lang === 'ja' ? 'English' : '日本語';
+}
+$('lang').onclick = () => { lang = lang === 'ja' ? 'en' : 'ja'; try { localStorage.setItem('playload-dev-lang', lang); } catch {} localize(); measure(); holdUntil = 0; poll(); };
+const STARTER = `// Move the invader with the D-pad. A changes its color.
+let x = 76, y = 68, col = 5;
+
+function tick() {
+  cls(0);
+  put(1, 1, 'HELLO MIYOO', 6);
+  x += (btn(3) - btn(2)) * 2;
+  y += (btn(1) - btn(0)) * 2;
+  if (btnp(4)) { col = col % 7 + 1; play(0, 'T240V12O5N1ce'); }
+  spr(x, y, '\u{1f47e}', col);
+}
+`;
+try { code.value = localStorage.getItem('playload-dev-source') || STARTER; } catch { code.value = STARTER; }
+$('curl').textContent = 'curl --data-binary @game.js http://' + location.host + '/run';
+
+function gutter() {
+  const n = code.value.split('\n').length;
+  let s = ''; for (let i = 1; i <= n; i++) s += i + '\n';
+  nums.textContent = s; nums.scrollTop = code.scrollTop;
+}
+code.addEventListener('scroll', () => { nums.scrollTop = code.scrollTop; });
+
+const b64url = (bytes) => { let s = ''; for (const b of bytes) s += String.fromCharCode(b); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
+async function pack(text) {
+  if (!self.CompressionStream) return null;
+  const stream = new Blob([text]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+async function unpack(hash) {
+  const m = /#(?:v1|1)\.([A-Za-z0-9_-]+)/.exec(hash); if (!m) throw new Error('That is not a Playload link.');
+  const bin = atob(m[1].replace(/-/g, '+').replace(/_/g, '/')); const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+  return await new Response(stream).text();
+}
+let packed = null;
+async function measure() {
+  packed = await pack(code.value).catch(() => null);
+  if (!packed) { $('size').textContent = tr(code.value.length + ' characters'); return; }
+  $('size').textContent = tr(packed.length + ' of 3072 packed bytes');
+  $('bar').style.width = Math.min(100, (packed.length / 3072) * 100) + '%';
+  $('bar').style.background = packed.length > 3072 ? 'var(--red)' : 'var(--green)';
+  $('open').href = 'https://kitao.dev/playload/app/#v1.' + b64url(packed);
+}
+
+let running = false;
+async function run() {
+  try {
+    const r = await fetch('/run', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: code.value });
+    const j = await r.json();
+    if (!j.ok) show('error', j.why || 'The Miyoo refused it.');
+    else show('starting', 'sent...');
+  } catch { show('off', 'Miyoo not reachable'); }
+}
+let holdUntil = 0;
+function tell(ok, text) { holdUntil = 0; show(ok ? 'running' : 'error', text); holdUntil = Date.now() + 3500; }
+function show(state, text) {
+  if (Date.now() < holdUntil) return; statusBox.className = state === 'starting' ? 'running' : state; statusBox.textContent = tr(text); }
+async function poll() {
+  try {
+    const j = await (await fetch('/status', { cache: 'no-store' })).json();
+    let seen = ''; try { seen = localStorage.getItem('playload-dev-code-id') || ''; } catch {}
+    if (j.code && String(j.code) !== seen) takeCode();
+    if (j.state === 'error') show('error', j.note || 'error');
+    else if (j.state === 'running') show('running', 'running' + (j.tick ? '  -  tick ' + j.tick.toFixed(1) + ' ms of 16.7' : ''));
+    else if (j.state === 'starting') show('running', 'starting...');
+    else show('off', 'ready - press Run');
+  } catch { show('off', 'Miyoo not reachable (is the Dev panel screen open?)'); }
+}
+setInterval(poll, 1000); poll();
+
+let timer = 0;
+code.addEventListener('input', () => {
+  gutter(); measure();
+  try { localStorage.setItem('playload-dev-source', code.value); } catch {}
+  if ($('live').checked) { clearTimeout(timer); timer = setTimeout(run, 700); }
+});
+code.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); run(); }
+  else if (e.key === 'Tab') { e.preventDefault(); const s = code.selectionStart; code.setRangeText('  ', s, code.selectionEnd, 'end'); code.dispatchEvent(new Event('input')); }
+});
+$('run').onclick = run;
+$('save').onclick = async () => {
+  if (!packed) return tell(false, 'This browser cannot pack the game.');
+  if (packed.length > 3072) return tell(false, 'Too big for a link: ' + packed.length + ' of 3072 bytes.');
+  const body = new URLSearchParams({ link: 'https://kitao.dev/playload/app/#v1.' + b64url(packed), name: $('name').value });
+  try {
+    const t = await (await fetch('/add', { method: 'POST', body })).text();
+    if (/<!--ok-->/.test(t)) tell(true, 'Saved to My Games' + ($('name').value.trim() ? ' as "' + $('name').value.trim() + '"' : '') + '.');
+    else tell(false, 'The Miyoo did not accept it.');
+  } catch { tell(false, 'Miyoo not reachable.'); }
+};
+$('load').onclick = async () => {
+  $('err').style.color = ''; $('err').textContent = '';
+  try { code.value = await unpack($('link').value); $('link').value = ''; code.dispatchEvent(new Event('input')); } catch (e) { $('err').textContent = tr(e.message || 'Could not read that link.'); }
+};
+localize(); gutter(); measure();
+
+// Kitao's examples, to read and change
+fetch('/examples').then((r) => r.json()).then((list) => {
+  for (const [i, ex] of list.entries()) { const o = document.createElement('option'); o.value = i; o.textContent = ex.name + ' - ' + ex.note; $('examples').append(o); }
+  $('examples').onchange = () => {
+    const ex = list[$('examples').value]; $('examples').value = '';
+    if (!ex) return;
+    previous = code.value.trim() && code.value !== STARTER && code.value !== ex.source ? code.value : null;
+    replaceCode(ex.source); $('name').value = '';
+    note('"' + ex.name + '" is in the editor.', true);
+  };
+}).catch(() => {});
+// a game sent over from the Miyoo ("Open in Dev" in its pause menu): take each one once, also while this page stays open
+let taking = false, previous = null;
+function replaceCode(text) { code.value = text; code.scrollTop = 0; code.dispatchEvent(new Event('input')); }
+function note(text, undo) {
+  $('err').style.color = 'var(--green)'; $('err').textContent = tr(text) + ' ';
+  if (undo && previous !== null) {
+    const b = document.createElement('button'); b.textContent = tr('Put back what was here');
+    b.onclick = () => { const t = previous; previous = null; replaceCode(t); $('err').textContent = ''; };
+    $('err').append(b);
+  }
+}
+async function takeCode() {
+  if (taking) return;
+  taking = true;
+  try {
+    const text = await (await fetch('/code', { cache: 'no-store' })).text();
+    const cut = text.indexOf('\n'), id = text.slice(0, cut), source = text.slice(cut + 1);
+    let seen = ''; try { seen = localStorage.getItem('playload-dev-code-id') || ''; } catch {}
+    if (cut < 0 || !source || id === '0' || id === seen) return;
+    try { localStorage.setItem('playload-dev-code-id', id); } catch {}
+    previous = code.value !== source && code.value.trim() && code.value !== STARTER ? code.value : null;
+    replaceCode(source);
+    const title = /@title[ \t]+(.+)/.exec(source);
+    $('name').value = ((title ? title[1].trim() : 'Game') + (lang === 'ja' ? ' (じぶんよう)' : ' (my version)')).slice(0, 40);
+    note('This is the game you opened on the Miyoo. Save to My Games keeps your version as a new game; the original stays as it is.', true);
+  } catch {} finally { taking = false; }
+}
+takeCode();
+$('new').onclick = () => {
+  if (code.value === STARTER) return;
+  previous = code.value.trim() ? code.value : null;
+  replaceCode(STARTER); $('name').value = '';
+  note('A new game.', true);
+};
+</script>
+</body>
+</html>

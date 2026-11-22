@@ -1,0 +1,20 @@
+# Pushing a tag like v1.0 zips the App folder and publishes it as a release.
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  zip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Zip the App folder
+        run: |
+          chmod +x App/Playload/playload App/Playload/playload-jit App/Playload/bin/curl App/Playload/launch.sh
+          zip -r "Playload-Miyoo-${GITHUB_REF_NAME}.zip" App -x '*.DS_Store'
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" "Playload-Miyoo-${GITHUB_REF_NAME}.zip" --title "Playload for Miyoo ${GITHUB_REF_NAME}" --notes-file docs/release-notes.md

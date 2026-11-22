@@ -1,0 +1,46 @@
+MIT License
+
+Copyright (c) 2026 0kCyb0rg (okcyborg.com)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+-------------------------------------------------------------------------------
+The MIT license above covers the code of the Miyoo version (src/, js/menu.js,
+js/dev.html, js/runtime.js, patches.mjs, the build scripts). These parts are
+NOT under it and keep their own licenses (texts in App/Playload/licenses):
+
+  App/Playload/playload.js, games.json, examples.json, src/glyphs8.h, src/logo8.h,
+  docs/logo.png, App/Playload/icon.png
+                        Built from Playload (github.com/kitao/playload),
+                        (c) Takashi Kitao, MIT: its engine, sound compiler,
+                        characters, examples, Arcade list and logo. The fonts
+                        and data inside it are listed in Playload-third-party.md.
+                        The Arcade games belong to their authors.
+  App/Playload/playload-jit
+                        Contains JavaScriptCore and WTF (WebKit), LGPL 2.1 with
+                        BSD parts, and ICU (Unicode license). To relink it
+                        against your own build of them, use this source and
+                        github.com/mroxfordyazuka/jsc-miyoo.
+  App/Playload/playload Contains QuickJS-ng, MIT.
+  App/Playload/bin/curl curl 8.10.1 with OpenSSL 3.3.2, the static build
+                        spruceOS ships (curl license; Apache 2.0).
+  App/Playload/cacert.pem  Mozilla CA bundle, MPL 2.0.
+  src/font_m5x7.h       m5x7 by Daniel Linssen (managore.itch.io/m5x7), used
+                        under its own terms.
+  src/ui.c              The UI kit is ArchiveTV's (github.com/mroxfordyazuka/ArchiveTV), MIT.

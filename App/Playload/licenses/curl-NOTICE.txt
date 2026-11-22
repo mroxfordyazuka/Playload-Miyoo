@@ -1,0 +1,3 @@
+bin/curl is a static build of curl 8.10.1 (https://curl.se) with OpenSSL 3.3.2, the same binary
+spruceOS ships in spruce/bin/curl. Playload only uses it when the system has no curl of its own
+(e.g. sprigUI). curl: see curl-COPYING.txt. OpenSSL: Apache License 2.0, see Apache-2.0-OpenSSL.txt.
