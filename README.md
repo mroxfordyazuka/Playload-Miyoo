@@ -1,5 +1,7 @@
 # Playload for Miyoo
 
+**English** · [日本語](README.ja.md)
+
 [Playload](https://kitao.dev/playload/) is Takashi Kitao's tiny game engine: 160×144, 8 colors, 3 sound
 channels, and a whole game fits in a link. This runs those games on the Miyoo Mini family, and lets you write
 new ones from your computer and see them on the handheld as you type.
