@@ -71,6 +71,7 @@ static char *g_cur_hash, *g_cur_src;      /* the game being played: its link (NU
 static int g_keep_error;
 static int g_appupdate;                    /* Settings asked to update the app itself */
 static char g_new_version[24];             /* a newer version we know is out, or "" */
+static int g_offer, g_from_offer;          /* a newer version was just found: show the full-screen offer when the list is up */
 static double g_busy_until;                /* the power light flickers until then */
 static double g_t0;
 static uint8_t g_px[320 * 240];
@@ -553,12 +554,18 @@ static int appcheck_poll(void) {
     char neu[700], cur[700], v[24], base[400]; update_dir("manifest.new", neu, sizeof neu); update_dir("manifest.txt", cur, sizeof cur);
     if (r < 0 || !WIFEXITED(status) || WEXITSTATUS(status) != 0) { unlink(neu); say("app update: check failed: %s", net_why(status)); return 0; }
     if (manifest_load("manifest.new", v, sizeof v, base, sizeof base, 0, 0) != 0) { unlink(neu); say("app update: the list did not look right"); return 0; }
-    char was[24]; snprintf(was, sizeof was, "%s", g_new_version);
     rename(neu, cur); newer_known();
     say("app update: this is %s, newest is %s", my_version(), v);
-    if (!g_new_version[0] || !strcmp(was, g_new_version)) return 0;     /* say it once per version */
-    snprintf(g_error, sizeof g_error, "Playload %s is out: see Settings", g_new_version);
-    return 1;
+    /* offer each new version once, full screen (update/offered remembers which); after that it waits in Settings */
+    char *off = read_file(g_dir, "update/offered", 0); char was[24] = "";
+    if (off) { snprintf(was, sizeof was, "%.15s", off); was[strcspn(was, " \r\n")] = 0; free(off); }
+    if (g_new_version[0] && strcmp(was, g_new_version)) g_offer = 1;
+    return 0;
+}
+/* the offer is on screen now: do not bring it up by itself again for this version */
+static void offer_shown(void) {
+    char path[700]; update_dir("offered", path, sizeof path);
+    FILE *f = fopen(path, "w"); if (f) { fprintf(f, "%s\n", g_new_version); fclose(f); }
 }
 
 #define TJ(en, ja) (S.lang == 1 ? (ja) : (en))
@@ -613,14 +620,21 @@ static int app_update(void (*show)(void), int (*keys)(void)) {
     const char *verify = getenv("VERIFY");
     if (verify && !strcmp(verify, "0")) { snprintf(g_error, sizeof g_error, "The Miyoo's date is wrong, so the download cannot be checked. Set the date, then try again."); return 0; }
     update_dir("manifest.new", neu, sizeof neu); update_dir("manifest.txt", cur, sizeof cur);
-    say("app update: looking at %s", update_url());
-    int st = up_fetch(update_url(), neu, 0, head, TJ("Looking for a new version...", "あたらしい バージョンを さがしています..."), "", 0, 0, show, keys);
-    if (st == 1) { unlink(neu); return 0; }
-    if (st != 0) { unlink(neu); snprintf(g_error, sizeof g_error, "%s", net_why(st)); say("app update: %s", g_error); return 0; }
-    if (manifest_load("manifest.new", v, sizeof v, base, sizeof base, &files, &n) != 0) { unlink(neu); snprintf(g_error, sizeof g_error, "That did not look like an update list."); return 0; }
-    rename(neu, cur); newer_known();
+    int st, offered = g_from_offer; g_from_offer = 0;
+    if (offered) {                           /* the look in the background has just fetched the list */
+        if (manifest_load("manifest.txt", v, sizeof v, base, sizeof base, &files, &n) != 0) return 0;
+    } else {
+        say("app update: looking at %s", update_url());
+        st = up_fetch(update_url(), neu, 0, head, TJ("Looking for a new version...", "あたらしい バージョンを さがしています..."), "", 0, 0, show, keys);
+        if (st == 1) { unlink(neu); return 0; }
+        if (st != 0) { unlink(neu); snprintf(g_error, sizeof g_error, "%s", net_why(st)); say("app update: %s", g_error); return 0; }
+        if (manifest_load("manifest.new", v, sizeof v, base, sizeof base, &files, &n) != 0) { unlink(neu); snprintf(g_error, sizeof g_error, "That did not look like an update list."); return 0; }
+        rename(neu, cur); newer_known();
+    }
     if (ver_cmp(v, my_version()) <= 0) { free(files); snprintf(g_error, sizeof g_error, "Playload %s is up to date.", my_version()); snprintf(g_head, sizeof g_head, "UP TO DATE"); return 0; }
-    /* which files differ from what is on the card? */
+    /* which files differ from what is on the card? (reading them all takes a few seconds) */
+    snprintf(l[0], sizeof l[0], TJ("Playload %s is out", "Playload %s が でました"), v);
+    up_screen(head, l[0], TJ("One moment...", "おまちください..."), "", "", "", show);
     long total = 0; int need = 0; char path[900];
     for (int i = 0; i < n; i++) {
         long size; snprintf(path, sizeof path, "%s/%s", g_dir, files[i].path);
@@ -637,7 +651,12 @@ static int app_update(void (*show)(void), int (*keys)(void)) {
     snprintf(l[1], sizeof l[1], TJ("You have %s.", "いまは %s です"), my_version());
     snprintf(l[2], sizeof l[2], TJ("Download: %.1f MB over Wi-Fi", "ダウンロード: %.1f MB (Wi-Fi)"), total / 1048576.0);
     snprintf(l[3], sizeof l[3], "%s", TJ("Your games and settings stay.", "ゲームと せっていは そのまま"));
-    if (!up_wait(head, l[0], l[1], l[2], l[3], TJ("A:Update  B:Not now", "A:こうしん  B:あとで"), show, keys)) { free(files); return 0; }
+    if (offered) offer_shown();
+    if (!up_wait(head, l[0], l[1], l[2], l[3], TJ("A:Update  B:Not now", "A:こうしん  B:あとで"), show, keys)) {
+        free(files);
+        if (offered) snprintf(g_error, sizeof g_error, "Later: Settings > Update Playload");     /* a short note back in the list */
+        return 0;
+    }
     /* fetch them one by one into update/files, then check every one */
     long have = 0; char url[700], out[900], dir[900];
     update_dir("files", dir, sizeof dir);
@@ -770,7 +789,8 @@ int main(int argc, char **argv) {
     if (!strcmp(cmd, "check")) {             /* the background look, waited for */
         S.autoupdate = 1; appcheck_begin();
         for (int i = 0; i < 400 && g_app_pid > 0; i++) { if (appcheck_poll()) break; usleep(20000); }
-        say("check: newer \"%s\", note \"%s\"", g_new_version, g_error);
+        say("check: newer \"%s\", offer %d", g_new_version, g_offer);
+        if (g_offer && argc > 4 && !strcmp(argv[4], "offer")) { g_offer = 0; g_from_offer = 1; int r = app_update(0, 0); say("offer: returned %d", r); return r == 42 ? 0 : 3; }
     }
     if (getenv("PL_NOTE") && !strcmp(argv[3], "menu")) { snprintf(g_error, sizeof g_error, "%s", getenv("PL_NOTE")); if (menu_with_note()) return 1; }
     else if (start_any(argv[3])) { say("START FAILED: %s", g_error); return 1; }
@@ -1051,9 +1071,13 @@ int main(int argc, char **argv) {
             if (draw_frames > 0) draw_frames--;
         }
     shown_already:
+        if (g_offer && !in_game && !srv_addr()[0] && !g_update) { g_offer = 0; g_appupdate = g_from_offer = 1; }   /* a new version: say so, full screen */
         if (g_appupdate && !in_game) {      /* Settings > Update Playload: its own screens, until it is done or given up */
+            int offered = g_from_offer;
             if (app_update(present_all, update_keys) == 42) { exit_code = 42; break; }
-            g_tab = 4; srv_stop();
+            if (!offered) g_tab = 4;
+            srv_stop();
+            if (offered && g_error[0]) snprintf(g_head, sizeof g_head, "NOTE");
             if (prog_start(g_menu_src, 1)) break;
             g_error[0] = 0; snprintf(g_head, sizeof g_head, "GAME STOPPED");
             raw = 0; g_backdrop = 1; draw_frames = 3; last = -1; continue;

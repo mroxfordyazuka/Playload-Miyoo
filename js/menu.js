@@ -25,7 +25,7 @@ const JA = {
   'GAME STOPPED': 'ゲームが とまりました', 'UPDATE FAILED': 'こうしん しっぱい', 'ARCADE UPDATED': 'アーケード こうしん', 'DEV PANEL': 'かいはつパネル',
   'The game stopped responding.': 'ゲームが おうとう しなくなりました', 'No connection. Is Wi-Fi on?': 'つながりません  Wi-Fi は オンですか?', 'The download timed out.': 'ダウンロードが じかんぎれに なりました',
   'Arcade list updated': 'アーケードを こうしんしました',
-  'Update Playload...': 'Playload を こうしん...', UPDATE: 'こうしん', 'UP TO DATE': 'さいしんです',
+  'Update Playload...': 'Playload を こうしん...', 'Later: Settings > Update Playload': 'あとで: せってい > Playload を こうしん', UPDATE: 'こうしん', 'UP TO DATE': 'さいしんです',
   'That did not look like an update list.': 'こうしんの リストが ただしくありません', 'A downloaded file was damaged. Try again.': 'ファイルが こわれていました  もういちど どうぞ',
   'Could not write to the card.': 'カードに かきこめません', 'The file is not there (yet).': 'ファイルが まだ ありません', 'Download failed.': 'ダウンロードに しっぱい しました',
   "The Miyoo's date is wrong, so the download cannot be checked. Set the date, then try again.": 'Miyoo の ひづけが ちがうので ダウンロードを たしかめられません  ひづけを あわせて もういちど どうぞ', 'Invalid game URL': 'ゲームの リンクが ただしくありません',
@@ -34,7 +34,7 @@ const JA = {
 const JA_FORMS = [
   [/^(\d+) games in the Arcade list now\.$/, 'アーケードは いま $1 ゲーム です'],
   [/^(\d+) new games? in the Arcade$/, 'アーケードに しんさく $1 ほん'],
-  [/^Playload ([\d.]+) is out: see Settings$/, 'Playload $1 が でました  せっていから こうしん'],
+
   [/^Playload ([\d.]+) is up to date\.$/, 'Playload $1 は さいしんです'],
   [/^Not enough room on the card: the update needs (\d+) MB free\.$/, 'カードの あきが たりません  $1 MB ひつようです'],
   [/^(\d+) received$/, '$1 けん とどいた'],

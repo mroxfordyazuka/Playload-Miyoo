@@ -30,9 +30,9 @@ TABS
              engine, CPU speed (Onion only), looking for new games at start.
 
 UPDATES
-  With Wi-Fi the app also looks for a newer version of itself when it starts and tells you if there is one.
-  Settings > "Update Playload..." downloads it (it asks first, and shows how big it is), checks every file, and
-  restarts into the new version. Your games, favorites and settings are not touched. The files come from
+  With Wi-Fi the app also looks for a newer version of itself when it starts. When there is one it says so on a
+  screen of its own, once, with the size of the download: A updates, B leaves it for later (Settings >
+  "Update Playload..." is always there). It checks every file and restarts into the new version. Your games, favorites and settings are not touched. The files come from
   github.com/mroxfordyazuka/Playload-Miyoo. Without Wi-Fi, copy a newer App folder over this one instead.
 
 GOOD TO KNOW
