@@ -1,0 +1,26 @@
+playload-miyoo-update 1
+version 1.1
+base https://raw.githubusercontent.com/mroxfordyazuka/Playload-Miyoo/c10fb85f18eb056a4d4e5af0fb1a563f752f9469/App/Playload/
+file f16fbabe 3337 README.txt
+file f97aee3d 224606 cacert.pem
+file c590bbfb 137 config.json
+file bce951b5 19248 dev.html
+file 0ef8d8cf 37114 examples.json
+file 00000000 0 full_resolution
+file 9a8f3772 190728 games.json
+file 4d56a34a 6171 icon.png
+file b79c17c8 4139 launch.sh
+file 11cbbd39 20665 menu.js
+file e14178f1 915632 playload
+file ba248fcb 40810464 playload-jit
+file 48c1a135 231270 playload.js
+file 464046ba 4687052 bin/curl
+file 86e2b4b4 11358 licenses/Apache-2.0-OpenSSL.txt
+file 3378151a 25584 licenses/LGPL-2.1-JavaScriptCore.txt
+file b20c3bc3 1070 licenses/MIT-Playload.txt
+file 94fe343c 1212 licenses/MIT-QuickJS-ng.txt
+file 89884678 16726 licenses/MPL-2.0-cacert.txt
+file 189fb305 1893 licenses/Playload-third-party.md
+file dfe5ab0d 21025 licenses/Unicode-ICU.txt
+file 08e4d96d 1088 licenses/curl-COPYING.txt
+file 072f904a 293 licenses/curl-NOTICE.txt
