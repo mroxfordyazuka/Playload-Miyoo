@@ -24,12 +24,19 @@ const JA = {
   'Add from phone': 'スマホから ついか', 'Scan with your phone': 'スマホで よみとる', '(same Wi-Fi), or open': '(おなじ Wi-Fi) または', 'Then paste a Playload': 'Playload の リンクを', 'link and press Send.': 'はりつけて そうしん', 'Waiting...': 'まっています...',
   'GAME STOPPED': 'ゲームが とまりました', 'UPDATE FAILED': 'こうしん しっぱい', 'ARCADE UPDATED': 'アーケード こうしん', 'DEV PANEL': 'かいはつパネル',
   'The game stopped responding.': 'ゲームが おうとう しなくなりました', 'No connection. Is Wi-Fi on?': 'つながりません  Wi-Fi は オンですか?', 'The download timed out.': 'ダウンロードが じかんぎれに なりました',
-  'Arcade list updated': 'アーケードを こうしんしました', 'Invalid game URL': 'ゲームの リンクが ただしくありません',
+  'Arcade list updated': 'アーケードを こうしんしました',
+  'Update Playload...': 'Playload を こうしん...', UPDATE: 'こうしん', 'UP TO DATE': 'さいしんです',
+  'That did not look like an update list.': 'こうしんの リストが ただしくありません', 'A downloaded file was damaged. Try again.': 'ファイルが こわれていました  もういちど どうぞ',
+  'Could not write to the card.': 'カードに かきこめません', 'The file is not there (yet).': 'ファイルが まだ ありません', 'Download failed.': 'ダウンロードに しっぱい しました',
+  "The Miyoo's date is wrong, so the download cannot be checked. Set the date, then try again.": 'Miyoo の ひづけが ちがうので ダウンロードを たしかめられません  ひづけを あわせて もういちど どうぞ', 'Invalid game URL': 'ゲームの リンクが ただしくありません',
   "No Wi-Fi address. Turn Wi-Fi on in the Miyoo's settings, then try again.": 'Wi-Fi の アドレスが ありません  Miyoo の せっていで Wi-Fi を オンにして もういちど どうぞ',
 };
 const JA_FORMS = [
   [/^(\d+) games in the Arcade list now\.$/, 'アーケードは いま $1 ゲーム です'],
   [/^(\d+) new games? in the Arcade$/, 'アーケードに しんさく $1 ほん'],
+  [/^Playload ([\d.]+) is out: see Settings$/, 'Playload $1 が でました  せっていから こうしん'],
+  [/^Playload ([\d.]+) is up to date\.$/, 'Playload $1 は さいしんです'],
+  [/^Not enough room on the card: the update needs (\d+) MB free\.$/, 'カードの あきが たりません  $1 MB ひつようです'],
   [/^(\d+) received$/, '$1 けん とどいた'],
   [/^(\d+) games? received$/, '$1 ゲーム とどきました'],
 ];
@@ -147,6 +154,7 @@ const settings = [
   { name: 'Look for new games at start', value: () => (get('autoupdate') === '1' ? 'On' : 'Off'), act: () => set('autoupdate', get('autoupdate') === '1' ? 0 : 1) },
   { name: 'Update the Arcade list...', more: 1, act: () => startUpdate() },
   { name: 'Add a game from your phone...', more: 1, act: () => startPhone() },
+  { name: 'Update Playload...', more: 1, value: () => (get('newversion') ? 'v' + get('newversion') : ''), act: () => set('appupdate', 1) },
   { name: 'About Playload', more: 1, act: () => { mode = 'about'; } },
 ];
 
@@ -194,9 +202,9 @@ function paint() {
     return;
   }
   if (mode === 'about') {
-    U(HEADER, 'About', 'v' + state.version);
+    U(HEADER, 'About', 'v' + get('appversion'));
     U(PANEL);
-    ['Playload, a tiny game engine whose', 'games fit in a link.', 'kitao.dev/playload', '', 'Engine and examples by Takashi Kitao.', 'Arcade games by their authors.', 'Miyoo version by 0kCyb0rg.'].forEach(
+    ['Playload, a tiny game engine whose', 'games fit in a link.', 'Playload ' + state.version + '  kitao.dev/playload', '', 'Engine and examples by Takashi Kitao.', 'Arcade games by their authors.', 'Miyoo version by 0kCyb0rg.'].forEach(
       (line, i) => U(TEXT, line, '', -1, 52 + i * 18, i === 2 ? 5 : i > 3 ? 1 : 0),
     );
     U(FOOTER, 'B:Back', jit ? 'JIT' : '');

@@ -11,6 +11,7 @@
 #include "pl.h"
 #include "js.h"
 #include "ui.h"
+#include "version.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,6 +19,9 @@
 #include <time.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <sys/stat.h>
+#include <sys/statvfs.h>
+#include <signal.h>
 #ifndef HOST
 #include <fcntl.h>
 #include <sys/ioctl.h>
@@ -65,6 +69,8 @@ static char g_head[40] = "GAME STOPPED";
 static char *g_launch;
 static char *g_cur_hash, *g_cur_src;      /* the game being played: its link (NULL for a dev build) and its source */
 static int g_keep_error;
+static int g_appupdate;                    /* Settings asked to update the app itself */
+static char g_new_version[24];             /* a newer version we know is out, or "" */
 static double g_busy_until;                /* the power light flickers until then */
 static double g_t0;
 static uint8_t g_px[320 * 240];
@@ -383,8 +389,11 @@ const char *h_ui(int op, const char *s1, const char *s2, int a, int b, int c, in
         else if (!strcmp(buf, "autoupdate")) snprintf(out, sizeof out, "%d", S.autoupdate);
         else if (!strcmp(buf, "font")) snprintf(out, sizeof out, "%d", S.font);
         else if (!strcmp(buf, "lang")) snprintf(out, sizeof out, "%d", S.lang);
+        else if (!strcmp(buf, "appversion")) snprintf(out, sizeof out, "%s", APP_VERSION);
+        else if (!strcmp(buf, "newversion")) snprintf(out, sizeof out, "%s", g_new_version);
         break;
     case UI_SET:
+        if (!strcmp(buf, "appupdate")) { g_appupdate = 1; return ""; }
         if (!strcmp(buf, "theme")) { S.theme = ((atoi(buf2) % ui_theme_count()) + ui_theme_count()) % ui_theme_count(); ui_set_theme(S.theme); }
         else if (!strcmp(buf, "effect")) S.effect = !!atoi(buf2); else if (!strcmp(buf, "bezel")) S.bezel = !!atoi(buf2);
         else if (!strcmp(buf, "volume")) { S.volume = atoi(buf2); if (S.volume < 25) S.volume = 25; if (S.volume > 400) S.volume = 400; }
@@ -412,10 +421,12 @@ static void picture_init(void) {
 
 /* ---- looking for new Arcade games by itself: a curl in the background, started once when the app opens ---- */
 static int g_check_pid = -1;
+static void appcheck_begin(void);
 static void check_begin(void) {
     if (!S.autoupdate) return;
     g_check_pid = net_update_begin(g_dir, 0);
     if (g_check_pid > 0) say("update: looking for new Arcade games in the background");
+    appcheck_begin();
 }
 /* 1 = the list changed and g_error holds a note for the list to show; 0 = nothing to do (yet) */
 static int check_poll(void) {
@@ -441,6 +452,239 @@ static int menu_with_note(void) {
     return r;
 }
 
+
+/* ---------------- updating the app itself ----------------
+   update.txt on GitHub (main branch) names the newest version and, for every file of the app, its CRC-32 and size,
+   plus the address of one fixed commit to take them from:
+       playload-miyoo-update 1
+       version 1.2
+       base https://raw.githubusercontent.com/mroxfordyazuka/Playload-Miyoo/<commit>/App/Playload/
+       file 1a2b3c4d 903312 playload
+   The files that differ are downloaded to update/files/, checked, and only then is update/ready written and the app
+   leaves with exit code 42: launch.sh moves them into place (the running program cannot replace itself) and starts
+   the app again. Games, favorites and settings are never in the list. */
+#define UPDATE_URL "https://raw.githubusercontent.com/mroxfordyazuka/Playload-Miyoo/main/update.txt"
+#define UPDATE_BASE "https://raw.githubusercontent.com/mroxfordyazuka/Playload-Miyoo/"
+typedef struct { unsigned crc; long size; char path[160]; } UFile;
+static const char *update_url(void) { const char *u = getenv("PL_UPDATE_URL"); return u && u[0] ? u : UPDATE_URL; }   /* PL_UPDATE_URL: for testing */
+/* this app's version. For trying the updater out: a file update/pretend-version holding an older number makes the
+   app believe it is that old, so it offers the real update again. */
+static const char *my_version(void) {
+    static char v[24];
+    char *t = read_file(g_dir, "update/pretend-version", 0);
+    snprintf(v, sizeof v, "%s", APP_VERSION);
+    if (t && t[0] >= '0' && t[0] <= '9') { snprintf(v, sizeof v, "%.15s", t); v[strcspn(v, " \r\n")] = 0; }
+    free(t);
+    return v;
+}
+static int ver_cmp(const char *a, const char *b) {
+    for (int i = 0; i < 4; i++) {
+        long x = strtol(a, (char **)&a, 10), y = strtol(b, (char **)&b, 10);
+        if (x != y) return x < y ? -1 : 1;
+        if (*a == '.') a++;
+        if (*b == '.') b++;
+    }
+    return 0;
+}
+static unsigned crc32_file(const char *path, long *size) {
+    static unsigned T[256];
+    if (!T[1]) for (unsigned i = 0; i < 256; i++) { unsigned c = i; for (int k = 0; k < 8; k++) c = c & 1 ? 0xedb88320u ^ (c >> 1) : c >> 1; T[i] = c; }
+    FILE *f = fopen(path, "rb"); if (size) *size = -1;
+    if (!f) return 0;
+    unsigned c = 0xffffffffu; long n = 0; static unsigned char buf[65536]; size_t k;
+    while ((k = fread(buf, 1, sizeof buf, f)) > 0) { for (size_t i = 0; i < k; i++) c = T[(c ^ buf[i]) & 255] ^ (c >> 8); n += (long)k; }
+    fclose(f);
+    if (size) *size = n;
+    return c ^ 0xffffffffu;
+}
+static int path_ok(const char *p) {
+    if (!p[0] || p[0] == '/' || strstr(p, "..")) return 0;
+    for (; *p; p++) if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || (*p >= '0' && *p <= '9') || *p == '.' || *p == '_' || *p == '-' || *p == '/')) return 0;
+    return 1;
+}
+/* read update/<name>. 0 = fine: version, base and the files (malloc'd, *n of them). -1 = not a list we trust */
+static int manifest_load(const char *name, char *version, size_t vcap, char *base, size_t bcap, UFile **files, int *n) {
+    char rel[64]; snprintf(rel, sizeof rel, "update/%s", name);
+    char *t = read_file(g_dir, rel, 0); if (!t) return -1;
+    int ok = !strncmp(t, "playload-miyoo-update 1\n", 24), count = 0, cap = 0; UFile *list = 0;
+    version[0] = base[0] = 0;
+    for (char *line = t; ok && line && *line;) {
+        char *end = strchr(line, '\n'); if (end) *end = 0;
+        size_t L = strlen(line); if (L && line[L - 1] == '\r') line[L - 1] = 0;
+        if (!strncmp(line, "version ", 8)) snprintf(version, vcap, "%s", line + 8);
+        else if (!strncmp(line, "base ", 5)) snprintf(base, bcap, "%s", line + 5);
+        else if (!strncmp(line, "file ", 5)) {
+            UFile f; memset(&f, 0, sizeof f);
+            if (sscanf(line + 5, "%x %ld %159s", &f.crc, &f.size, f.path) != 3 || !path_ok(f.path) || f.size < 0 || f.size > 200L * 1024 * 1024) ok = 0;
+            else { if (count == cap) { cap = cap ? cap * 2 : 32; list = realloc(list, (size_t)cap * sizeof *list); } list[count++] = f; }
+        }
+        line = end ? end + 1 : 0;
+    }
+    free(t);
+    /* only our own repository, unless a test address was given */
+    int ours = !strncmp(base, UPDATE_BASE, strlen(UPDATE_BASE)) || (getenv("PL_UPDATE_URL") && getenv("PL_UPDATE_URL")[0]);
+    for (const char *p = base; *p; p++) if (*p == '\'' || *p == '\\' || (unsigned char)*p < 33) ok = 0;
+    if (!ok || !version[0] || strlen(version) > 15 || !ours || !count || base[strlen(base) - 1] != '/') { free(list); return -1; }
+    if (files) { *files = list; *n = count; } else free(list);
+    return 0;
+}
+/* what the last look found: sets g_new_version if update/manifest.txt names a newer version than this one */
+static void newer_known(void) {
+    char v[24], base[400]; g_new_version[0] = 0;
+    if (manifest_load("manifest.txt", v, sizeof v, base, sizeof base, 0, 0) == 0 && ver_cmp(v, my_version()) > 0) snprintf(g_new_version, sizeof g_new_version, "%s", v);
+}
+static void update_dir(const char *sub, char *out, size_t cap) {
+    snprintf(out, cap, "%s/update", g_dir); mkdir(out, 0755);
+    if (sub) { snprintf(out, cap, "%s/update/%s", g_dir, sub); }
+}
+/* a look in the background when the app opens */
+static int g_app_pid = -1;
+static void appcheck_begin(void) {
+    if (!S.autoupdate) return;
+    char out[700]; update_dir("manifest.new", out, sizeof out);
+    g_app_pid = net_get_begin(g_dir, update_url(), out, 0);
+}
+/* 1 = a newer version is out and g_error holds a note for the list to show */
+static int appcheck_poll(void) {
+    if (g_app_pid <= 0) return 0;
+    int status = 0; pid_t r = waitpid(g_app_pid, &status, WNOHANG);
+    if (r == 0) return 0;
+    g_app_pid = -1;
+    char neu[700], cur[700], v[24], base[400]; update_dir("manifest.new", neu, sizeof neu); update_dir("manifest.txt", cur, sizeof cur);
+    if (r < 0 || !WIFEXITED(status) || WEXITSTATUS(status) != 0) { unlink(neu); say("app update: check failed: %s", net_why(status)); return 0; }
+    if (manifest_load("manifest.new", v, sizeof v, base, sizeof base, 0, 0) != 0) { unlink(neu); say("app update: the list did not look right"); return 0; }
+    char was[24]; snprintf(was, sizeof was, "%s", g_new_version);
+    rename(neu, cur); newer_known();
+    say("app update: this is %s, newest is %s", my_version(), v);
+    if (!g_new_version[0] || !strcmp(was, g_new_version)) return 0;     /* say it once per version */
+    snprintf(g_error, sizeof g_error, "Playload %s is out: see Settings", g_new_version);
+    return 1;
+}
+
+#define TJ(en, ja) (S.lang == 1 ? (ja) : (en))
+/* one of the updater's own screens: a heading, up to four lines, the buttons */
+static void up_screen(const char *head, const char *l1, const char *l2, const char *l3, const char *l4, const char *hints, void (*show)(void)) {
+    double t = h_now() / 1000.0;
+    ui_bg(t); ui_header(head, "v" APP_VERSION, t, 0); ui_panel();
+    const char *L[4] = { l1, l2, l3, l4 };
+    for (int i = 0; i < 4; i++) if (L[i] && L[i][0]) ui_text(-1, 76 + i * 22, L[i], i == 0 ? 5 : 0);
+    ui_footer(hints);
+    if (show) show();
+}
+/* wait for A (1) or B (0), keeping the screen alive. keys() returns 16 for A, 32 for B, 0 for nothing; -1 = quit */
+static int up_wait(const char *head, const char *l1, const char *l2, const char *l3, const char *l4, const char *hints, void (*show)(void), int (*keys)(void)) {
+    for (;;) {
+        up_screen(head, l1, l2, l3, l4, hints, show);
+        int k = keys ? keys() : 16;
+        if (k < 0 || k & 32) return 0;
+        if (k & 16) return 1;
+        usleep(30000);
+    }
+}
+/* run a download, drawing while it goes. 0 = done, 1 = B pressed, else a wait() status */
+static int up_fetch(const char *url, const char *out, int big, const char *head, const char *l1, const char *l2, long have, long total, void (*show)(void), int (*keys)(void)) {
+    int pid = net_get_begin(g_dir, url, out, big);
+    if (pid <= 0) return 127 << 8;
+    for (;;) {
+        int status = 0; pid_t r = waitpid(pid, &status, WNOHANG);
+        if (r != 0) return r < 0 ? 1 << 8 : status;
+        char l3[80] = "", l4[80] = "";
+        if (total > 0) {
+            struct stat st; long got = have + (stat(out, &st) == 0 ? (long)st.st_size : 0);
+            int pct = (int)(got * 100.0 / total); if (pct > 100) pct = 100;
+            int bars = pct * 24 / 100; char bar[32]; for (int i = 0; i < 24; i++) bar[i] = i < bars ? '#' : '.'; bar[24] = 0;
+            snprintf(l3, sizeof l3, "%s", bar);
+            snprintf(l4, sizeof l4, "%d%%   %.1f / %.1f MB", pct, got / 1048576.0, total / 1048576.0);
+        }
+        up_screen(head, l1, l2, l3, l4, big ? TJ("B:Cancel", "B:やめる") : "", show);
+        int k = keys ? keys() : 0;
+        if (k < 0 || k & 32) { kill(pid, SIGTERM); waitpid(pid, &status, 0); return 1; }
+        usleep(big ? 200000 : 60000);
+    }
+}
+/* Settings > Update Playload. returns 42 when an update is ready and the app must leave for launch.sh to put it in
+   place; 0 otherwise (g_error / g_head then hold what to tell the user, if anything) */
+static int app_update(void (*show)(void), int (*keys)(void)) {
+    const char *head = TJ("UPDATE", "こうしん");
+    char neu[700], cur[700], v[24], base[400], l[4][96];
+    UFile *files = 0; int n = 0;
+    g_appupdate = 0; g_error[0] = 0;
+    snprintf(g_head, sizeof g_head, "UPDATE");
+    const char *verify = getenv("VERIFY");
+    if (verify && !strcmp(verify, "0")) { snprintf(g_error, sizeof g_error, "The Miyoo's date is wrong, so the download cannot be checked. Set the date, then try again."); return 0; }
+    update_dir("manifest.new", neu, sizeof neu); update_dir("manifest.txt", cur, sizeof cur);
+    say("app update: looking at %s", update_url());
+    int st = up_fetch(update_url(), neu, 0, head, TJ("Looking for a new version...", "あたらしい バージョンを さがしています..."), "", 0, 0, show, keys);
+    if (st == 1) { unlink(neu); return 0; }
+    if (st != 0) { unlink(neu); snprintf(g_error, sizeof g_error, "%s", net_why(st)); say("app update: %s", g_error); return 0; }
+    if (manifest_load("manifest.new", v, sizeof v, base, sizeof base, &files, &n) != 0) { unlink(neu); snprintf(g_error, sizeof g_error, "That did not look like an update list."); return 0; }
+    rename(neu, cur); newer_known();
+    if (ver_cmp(v, my_version()) <= 0) { free(files); snprintf(g_error, sizeof g_error, "Playload %s is up to date.", my_version()); snprintf(g_head, sizeof g_head, "UP TO DATE"); return 0; }
+    /* which files differ from what is on the card? */
+    long total = 0; int need = 0; char path[900];
+    for (int i = 0; i < n; i++) {
+        long size; snprintf(path, sizeof path, "%s/%s", g_dir, files[i].path);
+        unsigned c = crc32_file(path, &size);
+        if (size == files[i].size && c == files[i].crc) files[i].size = -1;      /* have it already */
+        else { total += files[i].size; need++; }
+    }
+    say("app update: %s -> %s, %d files, %ld bytes", my_version(), v, need, total);
+    struct statvfs fs;
+    if (statvfs(g_dir, &fs) == 0 && (double)fs.f_bavail * fs.f_frsize < total + 8.0 * 1048576) {
+        free(files); snprintf(g_error, sizeof g_error, "Not enough room on the card: the update needs %.0f MB free.", total / 1048576.0 + 8); return 0;
+    }
+    snprintf(l[0], sizeof l[0], TJ("Playload %s is out", "Playload %s が でました"), v);
+    snprintf(l[1], sizeof l[1], TJ("You have %s.", "いまは %s です"), my_version());
+    snprintf(l[2], sizeof l[2], TJ("Download: %.1f MB over Wi-Fi", "ダウンロード: %.1f MB (Wi-Fi)"), total / 1048576.0);
+    snprintf(l[3], sizeof l[3], "%s", TJ("Your games and settings stay.", "ゲームと せっていは そのまま"));
+    if (!up_wait(head, l[0], l[1], l[2], l[3], TJ("A:Update  B:Not now", "A:こうしん  B:あとで"), show, keys)) { free(files); return 0; }
+    /* fetch them one by one into update/files, then check every one */
+    long have = 0; char url[700], out[900], dir[900];
+    update_dir("files", dir, sizeof dir);
+    {   /* files left from a download of some other version must not get mixed in: start clean then */
+        char was[24] = "", mark[900]; update_dir("for", mark, sizeof mark);
+        FILE *m = fopen(mark, "r"); if (m) { if (!fgets(was, sizeof was, m)) was[0] = 0; fclose(m); was[strcspn(was, "\r\n")] = 0; }
+        if (strcmp(was, v)) {
+            pid_t rm = fork();
+            if (rm == 0) { execl("/bin/rm", "rm", "-rf", dir, (char *)0); _exit(127); }
+            if (rm > 0) waitpid(rm, 0, 0);
+            snprintf(out, sizeof out, "%s/update/ready", g_dir); unlink(out);
+            m = fopen(mark, "w"); if (m) { fprintf(m, "%s\n", v); fclose(m); }
+        }
+    }
+    mkdir(dir, 0755);
+    for (int i = 0; i < n; i++) {
+        if (files[i].size < 0) continue;
+        snprintf(out, sizeof out, "%s/%s", dir, files[i].path);
+        for (char *p = out + strlen(dir) + 1; (p = strchr(p, '/')); p++) { *p = 0; mkdir(out, 0755); *p = '/'; }
+        long size; unsigned c = crc32_file(out, &size);
+        if (!(size == files[i].size && c == files[i].crc)) {                   /* not here from an earlier try */
+            if (size > files[i].size) unlink(out);
+            snprintf(url, sizeof url, "%s%s", base, files[i].path);
+            snprintf(l[0], sizeof l[0], TJ("Downloading Playload %s", "Playload %s を ダウンロードちゅう"), v);
+            snprintf(l[1], sizeof l[1], "%.60s", files[i].path);
+            st = up_fetch(url, out, 1, head, l[0], l[1], have, total, show, keys);
+            if (st == 1) { free(files); say("app update: cancelled"); return 0; }
+            c = crc32_file(out, &size);
+            if (st != 0 || size != files[i].size || c != files[i].crc) {
+                say("app update: %s failed (curl %d, %ld bytes, crc %08x, wanted %ld, %08x)", files[i].path, st >> 8, size, c, files[i].size, files[i].crc);
+                if (st == 0 || size > files[i].size) unlink(out);               /* a wrong file: start it over next time */
+                snprintf(g_error, sizeof g_error, "%s", st != 0 ? net_why(st) : "A downloaded file was damaged. Try again.");
+                free(files); return 0;
+            }
+        }
+        have += files[i].size;
+    }
+    free(files);
+    snprintf(out, sizeof out, "%s/update/ready", g_dir);
+    FILE *f = fopen(out, "w"); if (!f) { snprintf(g_error, sizeof g_error, "Could not write to the card."); return 0; }
+    fprintf(f, "%s\n", v); fclose(f); sync();
+    say("app update: %s is downloaded and checked; leaving so launch.sh can put it in place", v);
+    snprintf(l[0], sizeof l[0], TJ("Playload %s is ready", "Playload %s の じゅんびが できました"), v);
+    up_screen(head, l[0], TJ("Restarting...", "さいきどう します..."), "", "", "", show);
+    usleep(900000);
+    return 42;
+}
 
 /* ---------------- the pause menu (START in a game) ---------------- */
 enum { PA_RESUME, PA_FAV, PA_DEV, PA_LIST };
@@ -516,6 +760,18 @@ int main(int argc, char **argv) {
     picture_init();
     ay_init(44100);
     const char *cmd = argv[2];
+    newer_known();
+    if (!strcmp(cmd, "update")) {            /* playload <app> update <ppm|-> : run the app updater, saying yes to its question */
+        int r = app_update(0, 0);
+        say("update: returned %d, head \"%s\", message \"%s\"", r, g_head, g_error);
+        if (strcmp(argv[3], "-")) write_ppm(argv[3]);
+        return r == 42 ? 0 : 3;
+    }
+    if (!strcmp(cmd, "check")) {             /* the background look, waited for */
+        S.autoupdate = 1; appcheck_begin();
+        for (int i = 0; i < 400 && g_app_pid > 0; i++) { if (appcheck_poll()) break; usleep(20000); }
+        say("check: newer \"%s\", note \"%s\"", g_new_version, g_error);
+    }
     if (getenv("PL_NOTE") && !strcmp(argv[3], "menu")) { snprintf(g_error, sizeof g_error, "%s", getenv("PL_NOTE")); if (menu_with_note()) return 1; }
     else if (start_any(argv[3])) { say("START FAILED: %s", g_error); return 1; }
     int frames = argc > 4 ? atoi(argv[4]) : 60;
@@ -609,6 +865,18 @@ static void present(int whole) {
     SDL_UnlockSurface(scr);
     SDL_Flip(scr);
 }
+static void present_all(void) { present(1); }
+/* buttons for the updater's own screens: 16 = A went down, 32 = B, -1 = MENU or the app is told to quit */
+static int update_keys(void) {
+    SDL_Event ev; int k = 0;
+    while (SDL_PollEvent(&ev)) {
+        if (ev.type == SDL_QUIT) return -1;
+        if (ev.type != SDL_KEYDOWN) continue;
+        if (ev.key.keysym.sym == K_A) k |= 16;
+        if (ev.key.keysym.sym == K_B || ev.key.keysym.sym == K_MENU) k |= 32;
+    }
+    return k;
+}
 
 static int g_ch = 2;
 static void audio_cb(void *ud, Uint8 *stream, int len) {
@@ -676,7 +944,8 @@ int main(int argc, char **argv) {
     say("engine ready in %.0f ms", now_ms() - t_boot);
     check_begin();
 
-    int in_game = 0, paused = 0, mask = 0, raw = 0, praw = 0, hold = 0, quit = 0, draw_frames = 3; unsigned loops = 0;
+    int in_game = 0, paused = 0, mask = 0, raw = 0, praw = 0, hold = 0, quit = 0, draw_frames = 3, exit_code = 0; unsigned loops = 0;
+    newer_known();
     const double interval = 1000.0 / 60.0;
     double tick_avg = 0, last = -1, acc_tick = 0, acc_draw = 0, acc_show = 0, worst = 0, t_log = now_ms(); int acc_n = 0, acc_shown = 0, acc_drawn = 0, late = 0;
     while (!quit && !g_quit) {
@@ -707,7 +976,7 @@ int main(int argc, char **argv) {
         praw = raw; hold &= raw;            /* a button that closed the menu does nothing in the game until it is let go */
         mask = ((raw & 63) | (in_game && raw & 256 ? 16 : 0) | (in_game && raw & 512 ? 32 : 0)) & ~((hold & 63) | (hold & 256 ? 16 : 0) | (hold & 512 ? 32 : 0));
         g_raw = (raw & 63) | (raw & (64 | 1024) ? 64 : 0) | (raw & (128 | 2048) ? 128 : 0) | (raw & (256 | 512));
-        if ((++loops & 31) == 0 && check_poll()) {
+        if ((++loops & 31) == 0 && (check_poll() || appcheck_poll())) {
             if (in_game || srv_addr()[0]) g_error[0] = 0;      /* busy: the new list is simply there at the next visit */
             else { if (menu_with_note()) break; draw_frames = 3; last = -1; continue; }
         }
@@ -782,6 +1051,13 @@ int main(int argc, char **argv) {
             if (draw_frames > 0) draw_frames--;
         }
     shown_already:
+        if (g_appupdate && !in_game) {      /* Settings > Update Playload: its own screens, until it is done or given up */
+            if (app_update(present_all, update_keys) == 42) { exit_code = 42; break; }
+            g_tab = 4; srv_stop();
+            if (prog_start(g_menu_src, 1)) break;
+            g_error[0] = 0; snprintf(g_head, sizeof g_head, "GAME STOPPED");
+            raw = 0; g_backdrop = 1; draw_frames = 3; last = -1; continue;
+        }
         if (g_update) {                     /* its "updating" screen is up by now; this blocks until curl is done */
             if (run_update()) break;
             raw = 0; g_backdrop = 1; draw_frames = 3; last = -1; continue;
@@ -803,6 +1079,6 @@ int main(int argc, char **argv) {
     prog_free();
     if (g_audio_on) { SDL_PauseAudio(1); SDL_CloseAudio(); }
     SDL_Quit();
-    return 0;
+    return exit_code;                       /* 42: launch.sh puts a downloaded update in place and starts us again */
 }
 #endif

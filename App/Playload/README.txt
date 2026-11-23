@@ -29,6 +29,12 @@ TABS
   Settings   Language (English / Japanese), scanlines, the frame around games, theme, letters, volume,
              engine, CPU speed (Onion only), looking for new games at start.
 
+UPDATES
+  With Wi-Fi the app also looks for a newer version of itself when it starts and tells you if there is one.
+  Settings > "Update Playload..." downloads it (it asks first, and shows how big it is), checks every file, and
+  restarts into the new version. Your games, favorites and settings are not touched. The files come from
+  github.com/mroxfordyazuka/Playload-Miyoo. Without Wi-Fi, copy a newer App folder over this one instead.
+
 GOOD TO KNOW
   - Two engines: "JIT" (JavaScriptCore, compiles games to ARM code, about twice as fast) and "Small"
     (QuickJS). If the JIT one fails to start, the small one is used.

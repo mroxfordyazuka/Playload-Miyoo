@@ -48,6 +48,28 @@ int net_update_begin(const char *dir, int patient) {
     if (pid == 0) { execl("/bin/sh", "sh", "-c", cmd, (char *)0); _exit(127); }
     return (int)pid;
 }
+/* fetch any URL to a file, in a process of its own. big: a long download (no overall time limit, gives up when the
+   line goes quiet for a minute, continues a partial file). returns the pid, or -1 */
+int net_get_begin(const char *dir, const char *url, const char *out, int big) {
+    const char *curl = curl_bin(dir);
+    if (!curl) return -1;
+    for (const char *p = url; *p; p++) if (*p == '\'' || *p == '\\' || (unsigned char)*p < 33) return -1;
+    for (const char *p = out; *p; p++) if (*p == '\'' || *p == '\\' || (unsigned char)*p < 32) return -1;
+    char cmd[3200], tls[800];
+    const char *v = getenv("VERIFY");
+    if (v && !strcmp(v, "0")) snprintf(tls, sizeof tls, "-k"); else snprintf(tls, sizeof tls, "--cacert '%s/cacert.pem'", dir);
+    snprintf(cmd, sizeof cmd, "LD_LIBRARY_PATH=/mnt/SDCARD/.tmp_update/lib:/customer/lib:/mnt/SDCARD/miyoo/lib:$LD_LIBRARY_PATH "
+             "exec %s -sSL --fail --connect-timeout 15 %s -A Playload-Miyoo %s -o '%s' '%s'", curl,
+             big ? "--speed-limit 200 --speed-time 60 -C -" : "--max-time 40", tls, out, url);
+    pid_t pid = fork();
+    if (pid == 0) { execl("/bin/sh", "sh", "-c", cmd, (char *)0); _exit(127); }
+    return (int)pid;
+}
+const char *net_why(int status) {
+    int e = WIFEXITED(status) ? WEXITSTATUS(status) : 1;
+    return e == 0 ? "" : e == 127 ? "No curl on this system." : e == 6 || e == 7 ? "No connection. Is Wi-Fi on?" : e == 28 ? "The download timed out."
+         : e == 60 || e == 77 ? "Certificate check failed (is the date right?)" : e == 22 ? "The file is not there (yet)." : "Download failed.";
+}
 /* the fetch has ended with this wait() status. 0 = arcade.json is in place: msg says how many games, *added how many
    more than before (bundled = how many the built-in list has), *changed whether it differs from the one we had.
    -1 = failed, msg says why. */

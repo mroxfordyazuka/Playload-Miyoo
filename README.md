@@ -14,6 +14,7 @@ new ones from your computer and see them on the handheld as you type.
 - **Dev panel**: the Miyoo shows an address; open it in a browser on the same Wi-Fi, write a game, press
   *Run on Miyoo*. "Open in Dev" in a game's pause menu puts that game's code in the editor. Kitao's examples are there to start from.
 - Scanlines, a dark frame around the game, seven themes, English and Japanese.
+- **Updates itself**: with Wi-Fi it tells you when a newer version is out, and Settings › Update Playload downloads and installs it.
 - Two JavaScript engines: JavaScriptCore with its JIT (the default, about twice as fast) and QuickJS as the small fallback.
 
 ## Devices
@@ -76,6 +77,15 @@ buttons and a sound chip:
 
 Every bundled game was compared frame by frame against the original engine in Node on a PC; all but two draw
 identical pictures (those two shuffle with `sort(random)`, which differs between JavaScript engines).
+
+### Updates
+
+`update.txt` on the main branch names the newest version and lists every file of the app with its CRC-32 and size,
+plus the commit to fetch them from. The app downloads the files that differ into `App/Playload/update/`, checks
+them, and exits with code 42; `launch.sh` then moves them into place and starts the app again. Only addresses
+inside this repository are accepted, and nothing is downloaded when the device's clock is too wrong to check
+certificates. To publish a version: commit the new `App/Playload` files, run `python3 tools/make_update.py`,
+commit `update.txt`, push.
 
 ### Building
 

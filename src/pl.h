@@ -18,6 +18,8 @@ char *payload_decode(const char *hash, size_t *len, const char **why);
 int net_update(const char *dir, char *msg, size_t cap);
 int net_update_begin(const char *dir, int patient);
 int net_update_end(const char *dir, int status, int bundled, char *msg, size_t cap, int *added, int *changed);
+int net_get_begin(const char *dir, const char *url, const char *out, int big);   /* curl in a process of its own: pid or -1 */
+const char *net_why(int status);                                                 /* a wait() status from it, in words */
 int srv_start(void);
 void srv_stop(void);
 void srv_poll(const char *dir);
