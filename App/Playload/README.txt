@@ -21,7 +21,7 @@ TABS
              (Settings can turn that off); X fetches the list now. HEAVY marks the few 3D games that are
              too much arithmetic for this CPU.
   Favorites  Press Y on any game to keep it here. Kept in favorites.txt.
-  My Games   Your own links, kept in mygames.txt ("Name | link" per line). The first row shows a QR code:
+  My Games   Your own links, kept in mygames.txt (made when you add the first one; "Name | link" per line). The first row shows a QR code:
              scan it with a phone on the same Wi-Fi, paste a Playload link, send.
   Dev        "Start the dev panel..." shows an address. Open it in a browser on the same Wi-Fi, write a
              game, press Run on Miyoo: it plays here. Save to My Games keeps it. Under it are Kitao's

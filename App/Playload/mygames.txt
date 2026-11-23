@@ -1,3 +1,0 @@
-// Your own Playload games. One link per line; a name in front is optional:
-//   My game | https://kitao.dev/playload/app/#v1.jVfrjxvV...
-// (In Playload, use Share to get the link. Lines starting with // are ignored.)
