@@ -1,6 +1,12 @@
-# Pushing a tag like v1.0 zips the App folder and publishes it as a release.
+# Publishes a release: zips the App folder and attaches it.
+# Run it from the Actions tab ("Run workflow", type the version, e.g. v1.0), or push a tag like v1.0.
 name: Release
 on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish, e.g. v1.0'
+        required: true
   push:
     tags: ['v*']
 permissions:
@@ -11,10 +17,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Zip the App folder
+        env:
+          VERSION: ${{ inputs.version || github.ref_name }}
         run: |
           chmod +x App/Playload/playload App/Playload/playload-jit App/Playload/bin/curl App/Playload/launch.sh
-          zip -r "Playload-Miyoo-${GITHUB_REF_NAME}.zip" App -x '*.DS_Store'
+          zip -r "Playload-Miyoo-${VERSION}.zip" App -x '*.DS_Store'
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" "Playload-Miyoo-${GITHUB_REF_NAME}.zip" --title "Playload for Miyoo ${GITHUB_REF_NAME}" --notes-file docs/release-notes.md
+          VERSION: ${{ inputs.version || github.ref_name }}
+        run: gh release create "$VERSION" "Playload-Miyoo-${VERSION}.zip" --target "$GITHUB_SHA" --title "Playload for Miyoo ${VERSION}" --notes-file docs/release-notes.md
