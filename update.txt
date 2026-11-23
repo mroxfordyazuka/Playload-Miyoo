@@ -1,7 +1,7 @@
 playload-miyoo-update 1
 version 1.1
-base https://raw.githubusercontent.com/mroxfordyazuka/Playload-Miyoo/14a35e83f491b7691f36d9e509242a66802da3f1/App/Playload/
-file 6afe0c15 3396 README.txt
+base https://raw.githubusercontent.com/mroxfordyazuka/Playload-Miyoo/3ef132f4a5d51e8a18fb4243b9c26944ae3373ff/App/Playload/
+file 79d755bf 3429 README.txt
 file f97aee3d 224606 cacert.pem
 file c590bbfb 137 config.json
 file bce951b5 19248 dev.html
